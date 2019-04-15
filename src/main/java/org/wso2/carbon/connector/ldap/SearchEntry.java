@@ -42,9 +42,20 @@ import org.wso2.carbon.connector.core.ConnectException;
 
 import java.nio.ByteBuffer;
 import java.util.Iterator;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 public class SearchEntry extends AbstractConnector {
     protected static Log log = LogFactory.getLog(SearchEntry.class);
+
+    protected static Map<String, String> LDAP_OPERATORS = new HashMap<String, String>() {{
+		put("OR", "|");
+		put("AND", "&");
+		put("NOT", "!");
+	}};
+
+    protected String finalAttrFilter = "";
 
     @Override
     public void connect(MessageContext messageContext) throws ConnectException {
@@ -72,8 +83,9 @@ public class SearchEntry extends AbstractConnector {
         try {
             DirContext context = LDAPUtils.getDirectoryContext(messageContext);
 
-            String attrFilter = generateAttrFilter(filter, messageContext);
-            String searchFilter = generateSearchFilter(objectClass, attrFilter);
+            finalAttrFilter = "";
+            finalAttrFilter = generateAttrFilter(filter, messageContext);
+            String searchFilter = generateSearchFilter(objectClass, finalAttrFilter);
             try {
                 NamingEnumeration<SearchResult> results = searchInUserBase(
                         dn, searchFilter, returnAttributes, SearchControls.SUBTREE_SCOPE, context, limit);
@@ -220,23 +232,46 @@ public class SearchEntry extends AbstractConnector {
     }
 
     private String generateAttrFilter(String filter, MessageContext messageContext) {
-        String attrFilter = "";
         try {
             JSONObject object = new JSONObject(filter);
             Iterator keys = object.keys();
             while (keys.hasNext()) {
                 String key = (String) keys.next();
-                attrFilter += "(";
-                attrFilter += key + "=" + object.getString(key);
-                attrFilter += ")";
+                addAttrFilter(key, (Object) object.get(key));
             }
         } catch (JSONException e) {
             handleException("Error while passing the JSON object", e, messageContext);
         }
-        return attrFilter;
+        return finalAttrFilter;
     }
 
     private String generateSearchFilter(String objectClass, String attrFilter) {
         return "(&(objectClass=" + objectClass + ")" + attrFilter + ")";
+    }
+
+    private void addAttrFilter(String key, Object obj) {
+        if(LDAP_OPERATORS.containsKey(key.toUpperCase())) {
+            finalAttrFilter += "(" + LDAP_OPERATORS.get(key.toUpperCase());
+            try {
+                JSONObject subObject = (JSONObject) obj;
+                addAttrFiler(subObject);
+            } catch (Exception e) {
+                finalAttrFilter += "(";
+                finalAttrFilter += key + "=" + obj;
+                finalAttrFilter += ")";
+            }
+        } else {
+            finalAttrFilter += "(";
+            finalAttrFilter += key + "=" + obj;
+	}
+        finalAttrFilter += ")";
+    }
+
+    private void addAttrFiler(JSONObject jsonObject) throws JSONException {
+        Iterator subKeys = jsonObject.keys();
+        while(subKeys.hasNext()) {
+            String subKey = (String) subKeys.next();
+            addAttrFilter(subKey, jsonObject.getString(subKey));
+        }
     }
 }
