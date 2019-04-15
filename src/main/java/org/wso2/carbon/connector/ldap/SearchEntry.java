@@ -271,7 +271,7 @@ public class SearchEntry extends AbstractConnector {
         Iterator subKeys = jsonObject.keys();
         while(subKeys.hasNext()) {
             String subKey = (String) subKeys.next();
-            addAttrFilter(subKey, jsonObject.getString(subKey));
+            addAttrFilter(subKey, (Object) jsonObject.get(subKey));
         }
     }
 }
